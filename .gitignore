@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# ブリッジの実行時生成ファイル
+config.toml
+bridge.log
+tray.log
+nwtv_active.json
+
+# C# / .NET ビルド出力 (release/ の配布物は別途コミットする)
+plugin/bin/
+plugin/obj/
+*.user
+
+# エディタ / ツール
+.claude/
+.vs/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

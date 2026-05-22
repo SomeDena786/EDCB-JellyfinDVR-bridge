@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8" />
+    <title>jf-dvr</title>
+</head>
+<body>
+<div id="JfDvrConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
+    <div data-role="content">
+        <div class="content-primary">
+            <form id="JfDvrConfigForm">
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="BridgeBaseUrl">ブリッジ URL</label>
+                    <input id="BridgeBaseUrl" name="BridgeBaseUrl" type="text" is="emby-input" />
+                    <div class="fieldDescription">
+                        jf-dvr Python ブリッジの URL (例: http://127.0.0.1:40880)
+                    </div>
+                </div>
+                <button is="emby-button" type="submit" class="raised button-submit block">
+                    <span>保存</span>
+                </button>
+            </form>
+        </div>
+    </div>
+    <script type="text/javascript">
+        (function () {
+            var pluginId = 'e8b5a6d4-3c2f-4a1e-9b7d-6f0c1a2e3d4b';
+
+            document.querySelector('#JfDvrConfigPage')
+                .addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        document.querySelector('#BridgeBaseUrl').value = config.BridgeBaseUrl || '';
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+            document.querySelector('#JfDvrConfigForm')
+                .addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        config.BridgeBaseUrl = document.querySelector('#BridgeBaseUrl').value;
+                        ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+                    return false;
+                });
+        })();
+    </script>
+</div>
+</body>
+</html>

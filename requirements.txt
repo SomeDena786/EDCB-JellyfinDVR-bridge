@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+aiofiles
+pydantic
+typing_extensions
+# タスクトレイ常駐アイコン (tools/tray.py) 用
+pystray
+pillow

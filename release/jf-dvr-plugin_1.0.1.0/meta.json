@@ -1,0 +1,12 @@
+{
+    "category": "Live TV",
+    "guid": "e8b5a6d4-3c2f-4a1e-9b7d-6f0c1a2e3d4b",
+    "name": "jf-dvr (EDCB Live TV)",
+    "description": "EDCB をバックエンドにした Jellyfin Live TV / DVR 連携。",
+    "overview": "EDCB Live TV / DVR integration for Jellyfin.",
+    "owner": "jf-dvr",
+    "targetAbi": "10.11.0.0",
+    "version": "1.0.1.0",
+    "status": "Active",
+    "autoUpdate": false
+}

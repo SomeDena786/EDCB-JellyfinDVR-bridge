@@ -1,0 +1,35 @@
+# jf-dvr ブリッジ設定ファイル
+# このファイルを config.toml にコピーして環境に合わせて編集する。
+
+[edcb]
+# EpgTimerSrv の CtrlCmd TCP 接続先。
+# EpgTimer の設定ダイアログ「ネットワーク」タブで
+#   「外部からの接続を許可する」を有効にし、ポート番号をここに合わせること (既定 4510)。
+# ブリッジと EDCB が同じ PC なら host は 127.0.0.1 のままでよい。
+host = "127.0.0.1"
+port = 4510
+# EDCB のインストールフォルダ。Setting\LogoData から局ロゴを読み取る。
+folder = "C:\\DTV\\EDCB"
+
+[bridge]
+# ブリッジ自身が listen するアドレスとポート。
+# 0.0.0.0 にすると他ホスト (Docker 上の Jellyfin 等) からも到達できる。
+host = "0.0.0.0"
+port = 40880
+
+[epg]
+# EPG を何日先まで取得するか。
+days = 8
+
+[tuner]
+# ライブ視聴が同時に使用できるチューナー数の上限 (種別ごと、0 = 無制限)。
+# PT2 は ISDB-T(地上波) ×2 / ISDB-S(BS/CS) ×2。録画用にチューナーを残すために使う。
+live_max_isdbt = 1
+live_max_isdbs = 1
+# true の場合、EDCB が当該種別で録画中はライブ視聴を一切許可しない (録画を優先)。
+block_live_while_recording = true
+
+[channels]
+# true の場合、メインチャンネルと同じ番組を流しているサブチャンネルを
+# チャンネル一覧から隠す。マルチ編成等で本編と違う番組があるサブチャンネルは表示する。
+hide_simulcast_subchannels = true
