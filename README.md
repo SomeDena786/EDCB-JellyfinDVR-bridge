@@ -1,6 +1,6 @@
 # jf-dvr
 
-Earthsoft PT2 チューナー + EDCB をバックエンドに、Windows 上の Jellyfin で
+Bondriver + EDCB をバックエンドに、Windows 上の Jellyfin で
 Live TV / DVR を実現するための連携ソフトウェア。
 
 ## 構成
