@@ -175,6 +175,10 @@ public class LiveTvService : ILiveTvService
             RequiresOpening = false,
             RequiresClosing = false,
             SupportsProbing = true,
+            // ライブ視聴開始時、ffmpeg のストリーム解析が既定の長い analyzeduration
+            // (200 秒) いっぱい走り、頭が数分固まる。ブリッジが映像+音声のみの素直な
+            // TS に remux しているため数秒で解析できる。短い値を明示して即開始させる。
+            AnalyzeDurationMs = 3000,
             MediaStreams = new List<MediaStream>
             {
                 new MediaStream { Type = MediaStreamType.Video, Index = -1 },

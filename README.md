@@ -38,6 +38,19 @@ PT2 ─BonDriver─ EDCB (EpgDataCap_Bon / EpgTimerSrv)
 
 ## 1. Python ブリッジのセットアップ
 
+### 一括インストール (推奨)
+
+管理者 PowerShell でリポジトリ直下から実行する:
+
+```
+powershell -NoProfile -File install.ps1
+```
+
+`install.ps1` は venv 作成・依存導入・`config.toml` 生成・スケジュールタスク
+登録までを一気に行う。完了後 `config.toml` を環境に合わせて編集する。
+
+### 手動セットアップ
+
 ```
 cd jf-dvr
 python -m venv .venv
@@ -59,7 +72,7 @@ python -m venv .venv
 powershell -NoProfile -File tools\install_service.ps1
 ```
 
-これで 2 つのタスクが登録される。
+`install.ps1` / `install_service.ps1` のどちらも、2 つのタスクを登録する。
 
 - **jf-dvr-bridge** — ブリッジ本体。SYSTEM 権限・システム起動時に開始 (常時稼働)。
 - **jf-dvr-tray** — タスクトレイ常駐アイコン。ログオン中のユーザーのデスクトップ
@@ -73,14 +86,14 @@ powershell -NoProfile -File tools\install_service.ps1
 
 ### ビルド済みパッケージを使う場合 (推奨)
 
-`release/jf-dvr-plugin_1.0.1.0/` がビルド済みパッケージ。フォルダごと
-Jellyfin のプラグインフォルダにコピーするだけでよい:
+`release/jf-dvr_1.0.1.0/` がビルド済みパッケージ。Jellyfin を停止してから
+リポジトリ直下で次を実行する (古い jf-dvr フォルダの除去も行う):
 
 ```
-%ProgramData%\Jellyfin\Server\plugins\jf-dvr-plugin_1.0.1.0\
+powershell -NoProfile -File tools\install-plugin.ps1
 ```
 
-詳細な手順は [`release/INSTALL.md`](release/INSTALL.md) を参照。
+その後 Jellyfin を起動する。詳細は [`release/INSTALL.md`](release/INSTALL.md) を参照。
 
 ### ソースからビルドする場合 (.NET 9 SDK 以上が必要)
 
@@ -88,11 +101,11 @@ Jellyfin のプラグインフォルダにコピーするだけでよい:
 dotnet build plugin\Jellyfin.Plugin.JfDvr.csproj -c Release
 ```
 
-`plugin\bin\Release\net9.0\Jellyfin.Plugin.JfDvr.dll` と `plugin\meta.json` を
-Jellyfin のプラグインフォルダにコピーする:
+ビルド後、Jellyfin を停止して `tools\install-plugin.ps1` を実行する
+(ビルド出力を自動で検出してコピーする)。手動で置く場合のコピー先は:
 
 ```
-%ProgramData%\Jellyfin\Server\plugins\jf-dvr-plugin_1.0.1.0\
+%ProgramData%\Jellyfin\Server\plugins\jf-dvr_1.0.1.0\
 ```
 
 ### 共通
@@ -154,6 +167,7 @@ block_live_while_recording = true
 | `plugin/` | C# Jellyfin プラグイン (ILiveTvService) |
 | `tools/` | 補助スクリプト (疎通確認・自己診断・常駐化・トレイ・デプロイ) |
 | `release/` | ビルド済みプラグインの配布物 ([`release/INSTALL.md`](release/INSTALL.md)) |
+| `install.ps1` | ブリッジ一括インストール (venv・依存・設定・常駐化) |
 | `run.py` | ブリッジ起動エントリポイント |
 
 ## ライセンス

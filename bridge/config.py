@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+import os
 import tomllib
 from pathlib import Path
 
 from pydantic_core import Url
+
+
+def _find_ffmpeg() -> str:
+    """ ffmpeg.exe を既知の場所から探す。見つからなければ空文字。 """
+    program_files = os.environ.get('ProgramFiles', r'C:\Program Files')
+    candidates = [
+        Path(program_files) / 'Jellyfin' / 'Server' / 'ffmpeg.exe',
+    ]
+    for path in candidates:
+        if path.is_file():
+            return str(path)
+    return ''
 
 
 class Config:
@@ -30,6 +43,8 @@ class Config:
         # ブリッジ自身の listen 設定
         self.bridge_host: str = bridge.get('host', '0.0.0.0')
         self.bridge_port: int = int(bridge.get('port', 40880))
+        # ライブ視聴の remux に使う ffmpeg。未指定なら既知の場所から自動検出する。
+        self.ffmpeg_path: str = bridge.get('ffmpeg_path', '') or _find_ffmpeg()
 
         # EPG を何日先まで取得するか
         self.epg_days: int = int(epg.get('days', 8))

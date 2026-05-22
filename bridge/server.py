@@ -27,6 +27,7 @@ from bridge.streaming import (
     cleanup_orphan_tuners,
     open_live_stream,
     schedule_cleanup,
+    set_ffmpeg_path,
     set_tsreadex_path,
 )
 from edcb.EDCBTuner import EDCBTuner
@@ -34,6 +35,7 @@ from edcb.EDCBTuner import EDCBTuner
 config = load_config()
 gateway = EDCBGateway(config)
 set_tsreadex_path(config.tsreadex_path)
+set_ffmpeg_path(config.ffmpeg_path)
 
 
 @asynccontextmanager

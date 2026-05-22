@@ -16,6 +16,9 @@ folder = "C:\\DTV\\EDCB"
 # 0.0.0.0 にすると他ホスト (Docker 上の Jellyfin 等) からも到達できる。
 host = "0.0.0.0"
 port = 40880
+# ライブ視聴の TS を Jellyfin が即解析できる形に整える remux 用 ffmpeg。
+# 未指定なら Jellyfin 同梱の ffmpeg を自動検出する。別の場所にある場合のみ指定。
+# ffmpeg_path = "C:\\Program Files\\Jellyfin\\Server\\ffmpeg.exe"
 
 [epg]
 # EPG を何日先まで取得するか。

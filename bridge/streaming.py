@@ -1,8 +1,14 @@
 """ライブ TS ストリーミング。
 
 EDCB の NetworkTV モードで取得した生 TS は ISDB の多サービス TS のため、
-ffmpeg がそのままでは映像を正しく復号できないことがある。tsreadex に通して
-指定サービスのみの整形済み TS にしてから配信する。
+Jellyfin 側の ffmpeg がそのまま扱うとストリーム解析 (find_stream_info) に
+非常に長い時間がかかる。疎な字幕・データ・EIT のストリームを待ち続けるため、
+ライブ視聴の頭が数分固まったように見える。
+
+そこで配信前に 2 段のパイプラインで TS を整える:
+  1. tsreadex — 指定サービスのみを抽出し、ISDB 特有の TS を ffmpeg 向けに整形。
+  2. ffmpeg   — 映像+主音声のみへ remux する。Jellyfin の ffmpeg が即座に
+                解析できる単純な mpegts にする (再エンコードはしない copy)。
 
 ライブ視聴が終わったら NetworkTV の EpgDataCap_Bon を必ず終了してチューナーを
 解放する。前回のクラッシュ等で閉じ損ねたチューナーは起動時に掃除する。
@@ -22,14 +28,21 @@ from edcb.EDCBTuner import EDCBTuner
 # 1 回の読み出しサイズ。188 (TS パケット) × 256
 READ_CHUNK = 48128
 
-# tsreadex 実行ファイルのパス (サーバー起動時に設定)
+# 外部ツールのパス (サーバー起動時に設定)
 _tsreadex_path: str = ''
+_ffmpeg_path: str = ''
 
 
 def set_tsreadex_path(path: str) -> None:
-    """ tsreadex.exe のパスを設定する。空または存在しない場合は素通しになる。 """
+    """ tsreadex.exe のパスを設定する。空または存在しない場合はこの段を飛ばす。 """
     global _tsreadex_path
     _tsreadex_path = path or ''
+
+
+def set_ffmpeg_path(path: str) -> None:
+    """ ffmpeg.exe のパスを設定する。空または存在しない場合はこの段を飛ばす。 """
+    global _ffmpeg_path
+    _ffmpeg_path = path or ''
 
 
 # 起動中の NetworkTV チューナー ID を記録するファイル (クラッシュ後の掃除用)
@@ -96,7 +109,7 @@ async def cleanup_orphan_tuners() -> None:
 
 
 class LiveStreamSession:
-    """ チューナー・生 TS・tsreadex を束ねたライブ視聴セッション。 """
+    """ チューナー・生 TS・整形パイプラインを束ねたライブ視聴セッション。 """
 
     def __init__(self, tuner: EDCBTuner, reader, owner_id: str, kind: str, sid: int) -> None:
         self._tuner = tuner
@@ -106,52 +119,94 @@ class LiveStreamSession:
         self._sid = sid
         self._nwtv_id = tuner.getEDCBNetworkTVID()
         self._closed = False
-        self._proc: asyncio.subprocess.Process | None = None
-        self._pump_task: asyncio.Task | None = None
+        self._procs: list[asyncio.subprocess.Process] = []
+        self._tasks: list[asyncio.Task] = []
+        # 配信元。パイプライン構築後に最終段の出力へ差し替える。
+        self._output = reader
 
-    async def start_tsreadex(self) -> None:
-        """ tsreadex を起動し、生 TS を流し込むポンプタスクを開始する。
+    async def start_pipeline(self) -> None:
+        """ tsreadex → ffmpeg のパイプラインを起動する。
 
-        tsreadex が使えない場合は素通し (生 TS を直接配信) になる。
+        各ツールが使えない場合はその段を飛ばす (両方無ければ生 TS を素通し)。
         """
-        if not _tsreadex_path or not Path(_tsreadex_path).is_file():
-            return
+        source = self._reader
+
+        # 段1: tsreadex。指定サービスのみ抽出し ISDB の TS を整形する。
+        if _tsreadex_path and Path(_tsreadex_path).is_file():
+            tsr = await self._spawn(
+                _tsreadex_path,
+                # EIT/SDTT/BIT を除去してストリーム解析を軽くする
+                '-x', '18/38/39',
+                # 指定サービスのみ抽出する
+                '-n', str(self._sid),
+                # 主音声を常に連続して存在させる (無ければ無音 AAC を生成)
+                '-a', '13',
+                # 標準入力から読む
+                '-',
+            )
+            if tsr is not None:
+                self._tasks.append(asyncio.create_task(self._pump(source, tsr.stdin)))
+                source = tsr.stdout
+
+        # 段2: ffmpeg。映像+主音声のみへ remux し、Jellyfin が即解析できる TS にする。
+        if _ffmpeg_path and Path(_ffmpeg_path).is_file():
+            ff = await self._spawn(
+                _ffmpeg_path,
+                '-hide_banner', '-loglevel', 'error',
+                # 壊れたパケットは捨てる (ライブ TS のグリッチ対策)
+                '-fflags', '+discardcorrupt',
+                # ブリッジ側で素早く解析を打ち切り、疎なストリームを待ち続けない
+                '-analyzeduration', '3000000', '-probesize', '6000000',
+                '-i', 'pipe:0',
+                # 映像と主音声のみ取り出す。字幕・データ・EIT は捨てる。
+                '-map', '0:v:0?', '-map', '0:a:0?',
+                '-c', 'copy',
+                '-f', 'mpegts', 'pipe:1',
+            )
+            if ff is not None:
+                self._tasks.append(asyncio.create_task(self._pump(source, ff.stdin)))
+                source = ff.stdout
+
+        self._output = source
+
+    async def _spawn(self, *args: str) -> asyncio.subprocess.Process | None:
+        """ 外部プロセスを起動する。失敗したら None を返してその段を飛ばす。 """
         try:
-            self._proc = await asyncio.create_subprocess_exec(
-                _tsreadex_path, '-n', str(self._sid), '-',
+            proc = await asyncio.create_subprocess_exec(
+                *args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
         except Exception as exc:
-            print(f'[jf-dvr] tsreadex 起動失敗、素通しに切替: {exc!r}', flush=True)
-            self._proc = None
-            return
-        self._pump_task = asyncio.create_task(self._pump())
+            print(f'[jf-dvr] プロセス起動失敗 ({Path(args[0]).name}): {exc!r}', flush=True)
+            return None
+        self._procs.append(proc)
+        return proc
 
-    async def _pump(self) -> None:
-        """ EDCB の生 TS を tsreadex の標準入力へ流し込む。 """
+    @staticmethod
+    async def _pump(src, dst) -> None:
+        """ src から読んで dst へ書き込む。EOF または失敗で dst を閉じる。 """
         try:
             while True:
-                chunk = await self._reader.read(READ_CHUNK)
+                chunk = await src.read(READ_CHUNK)
                 if not chunk:
                     break
-                self._proc.stdin.write(chunk)
-                await self._proc.stdin.drain()
+                dst.write(chunk)
+                await dst.drain()
         except Exception:
             pass
         finally:
             try:
-                self._proc.stdin.close()
+                dst.close()
             except Exception:
                 pass
 
     async def iter_ts(self) -> AsyncIterator[bytes]:
-        """ 整形済み TS (tsreadex の出力。無ければ生 TS) を読み出して配信する。 """
-        source = self._proc.stdout if self._proc is not None else self._reader
+        """ 整形済み TS (パイプライン最終段の出力) を読み出して配信する。 """
         try:
             while True:
-                chunk = await source.read(READ_CHUNK)
+                chunk = await self._output.read(READ_CHUNK)
                 if not chunk:
                     break
                 yield chunk
@@ -161,22 +216,22 @@ class LiveStreamSession:
             schedule_cleanup(self)
 
     async def aclose(self) -> None:
-        """ tsreadex を止め、NetworkTV の EpgDataCap_Bon を終了してチューナーを解放する。 """
+        """ パイプラインを止め、NetworkTV を終了してチューナーを解放する。 """
         if self._closed:
             return
         self._closed = True
         print(f'[jf-dvr] ライブ視聴終了、チューナー解放を開始: nwtv_id={self._nwtv_id}', flush=True)
 
-        # ポンプタスクと tsreadex を止める
-        if self._pump_task is not None:
-            self._pump_task.cancel()
-        if self._proc is not None:
+        # ポンプタスクと外部プロセス (tsreadex / ffmpeg) を止める
+        for task in self._tasks:
+            task.cancel()
+        for proc in self._procs:
             try:
-                self._proc.kill()
+                proc.kill()
             except Exception:
                 pass
             try:
-                await asyncio.wait_for(self._proc.wait(), timeout=3)
+                await asyncio.wait_for(proc.wait(), timeout=3)
             except Exception:
                 pass
 
@@ -235,7 +290,7 @@ async def open_live_stream(
         if reader is not None:
             await _mark_active(tuner.getEDCBNetworkTVID())
             session = LiveStreamSession(tuner, reader, owner_id, kind, sid)
-            await session.start_tsreadex()
+            await session.start_pipeline()
             print(f'[jf-dvr] ライブ視聴開始: nwtv_id={tuner.getEDCBNetworkTVID()} '
                   f'kind={kind} ch={onid}-{tsid}-{sid}', flush=True)
 
