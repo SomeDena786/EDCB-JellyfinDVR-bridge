@@ -43,13 +43,15 @@ def parse_channel_id(value: str) -> tuple[int, int, int]:
 
 
 def network_type(onid: int) -> str:
-    """ ONID からネットワーク種別 (GR/BS/CS/OTHER) を判定する。 """
+    """ ONID からネットワーク種別 (GR/BS/CS/BS4K/OTHER) を判定する。 """
     if 0x7880 <= onid <= 0x7FFF:
         return 'GR'
     if onid == 0x0004:
         return 'BS'
     if onid in (0x0006, 0x0007):
         return 'CS'
+    if onid == 0x000B:
+        return 'BS4K'   # 新4K衛星放送 (BS4K)。dantto4k 等で TS 化されて入ってくる
     return 'OTHER'
 
 
@@ -153,14 +155,20 @@ class EDCBGateway:
         return await EDCBUtil.getEDCBStatus(self.config.edcb_url)
 
     async def is_recording(self, kind: str) -> bool:
-        """ 指定種別 (isdbt / isdbs) のチューナーで EDCB が録画中かどうかを返す。 """
+        """ 指定種別 (isdbt / isdbs / bs4k) のチューナーで EDCB が録画中かどうかを返す。 """
         tuners = await self._cmd().sendEnumTunerProcess()
         if not tuners:
             return False
         for tuner in tuners:
             if not tuner.get('rec_flag'):
                 continue
-            tuner_kind = 'isdbt' if network_type(tuner['onid']) == 'GR' else 'isdbs'
+            nt = network_type(tuner['onid'])
+            if nt == 'GR':
+                tuner_kind = 'isdbt'
+            elif nt == 'BS4K':
+                tuner_kind = 'bs4k'
+            else:
+                tuner_kind = 'isdbs'
             if tuner_kind == kind:
                 return True
         return False

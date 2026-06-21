@@ -246,7 +246,7 @@ class EDCBUtil:
         return int((dt.timestamp() + tz.utcoffset(None).total_seconds()) * 10000000) + 116444736000000000
 
     @staticmethod
-    async def openViewStream(process_id: int, timeout_sec: float = 10.0) -> tuple[asyncio.StreamReader, asyncio.StreamWriter] | None:
+    async def openViewStream(process_id: int, timeout_sec: float = 20.0) -> tuple[asyncio.StreamReader, asyncio.StreamWriter] | None:
         """
         View アプリの SrvPipe ストリームの転送を開始する
 
@@ -271,7 +271,7 @@ class EDCBUtil:
         return None
 
     @staticmethod
-    async def openPipeStream(process_id: int, buffering: int = -1, timeout_sec: float = 10.0, dir: str | None = None) -> PipeStreamReader | None:
+    async def openPipeStream(process_id: int, buffering: int = -1, timeout_sec: float = 20.0, dir: str | None = None) -> PipeStreamReader | None:
         """
         システムに存在する SrvPipe ストリームを開き、PipeStreamReader を返す
 

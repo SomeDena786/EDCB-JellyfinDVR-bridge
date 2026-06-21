@@ -148,8 +148,14 @@ async def get_recording_stream(rec_id: int):
 @app.get('/stream/{channel}')
 async def get_live_stream(channel: str):
     onid, tsid, sid = _parse_channel(channel)
-    kind = 'isdbt' if network_type(onid) == 'GR' else 'isdbs'
-    cap = config.live_max_isdbt if kind == 'isdbt' else config.live_max_isdbs
+    # ネットワーク種別ごとにチューナー枠を分ける (BS4K は別物理チューナー)
+    nt = network_type(onid)
+    if nt == 'GR':
+        kind, cap = 'isdbt', config.live_max_isdbt
+    elif nt == 'BS4K':
+        kind, cap = 'bs4k', config.live_max_bs4k
+    else:
+        kind, cap = 'isdbs', config.live_max_isdbs
 
     # EDCB が当該種別で録画中ならライブ視聴を断る (録画を優先する)
     if config.block_live_while_recording and await gateway.is_recording(kind):

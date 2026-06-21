@@ -27,3 +27,8 @@ plugin/obj/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# 同一フォルダにある openwrt / ホームネットワーク関連 (jf-dvr とは別件)
+docs/openwrt-*
+release/release.zip
+tools/gen-ntt-*

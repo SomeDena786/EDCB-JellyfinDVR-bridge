@@ -52,6 +52,8 @@ class Config:
         # ライブ視聴のチューナー使用上限 (種別ごと、0 = 無制限)
         self.live_max_isdbt: int = int(tuner.get('live_max_isdbt', 1))
         self.live_max_isdbs: int = int(tuner.get('live_max_isdbs', 1))
+        # BS4K は別物理チューナー (dantto4k 経由など)。BS/CS とは独立した枠を持つ。
+        self.live_max_bs4k: int = int(tuner.get('live_max_bs4k', 1))
         # true の場合、EDCB が当該種別で録画中はライブ視聴を許可しない
         self.block_live_while_recording: bool = bool(
             tuner.get('block_live_while_recording', True))

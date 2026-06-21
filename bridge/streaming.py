@@ -55,7 +55,7 @@ _cleanup_tasks: set = set()
 
 # ライブ視聴で現在使用中のチューナー数 (種別ごと)
 _live_lock = asyncio.Lock()
-_live_counts: dict[str, int] = {'isdbt': 0, 'isdbs': 0}
+_live_counts: dict[str, int] = {'isdbt': 0, 'isdbs': 0, 'bs4k': 0}
 
 
 def schedule_cleanup(session) -> None:
@@ -128,7 +128,16 @@ class LiveStreamSession:
         """ tsreadex → ffmpeg のパイプラインを起動する。
 
         各ツールが使えない場合はその段を飛ばす (両方無ければ生 TS を素通し)。
+        BS4K は dantto4k がすでに単一サービスの TS にしているうえ、ブリッジ側
+        パイプラインの処理速度が HEVC の高ビットレートに追いつかないと
+        EpgDataCap_Bon → BonDriver_dantto4k に backpressure がかかってクラッシュ
+        するため、パイプラインを素通しにする (プラグイン側の AnalyzeDurationMs で
+        Jellyfin の ffmpeg 解析は別途短縮済み)。
         """
+        if self._kind == 'bs4k':
+            self._output = self._reader
+            return
+
         source = self._reader
 
         # 段1: tsreadex。指定サービスのみ抽出し ISDB の TS を整形する。
@@ -153,10 +162,12 @@ class LiveStreamSession:
             ff = await self._spawn(
                 _ffmpeg_path,
                 '-hide_banner', '-loglevel', 'error',
-                # 壊れたパケットは捨てる (ライブ TS のグリッチ対策)
+                # 壊れたパケットは捨て、デコード/パースエラーは無視する
+                # (BS4K dantto4k のように初期 TS が乱れがちなチューナー対策)
                 '-fflags', '+discardcorrupt',
-                # ブリッジ側で素早く解析を打ち切り、疎なストリームを待ち続けない
-                '-analyzeduration', '3000000', '-probesize', '6000000',
+                '-err_detect', 'ignore_err',
+                # 解析時間に多少余裕を持たせる (HEVC/BS4K の頭出しに少しかかる場合があるため)
+                '-analyzeduration', '5000000', '-probesize', '10000000',
                 '-i', 'pipe:0',
                 # 映像と主音声のみ取り出す。字幕・データ・EIT は捨てる。
                 '-map', '0:v:0?', '-map', '0:a:0?',

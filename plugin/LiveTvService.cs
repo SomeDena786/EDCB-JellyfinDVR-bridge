@@ -165,6 +165,45 @@ public class LiveTvService : ILiveTvService
 
     private MediaSourceInfo BuildMediaSource(string channelId)
     {
+        // チャンネル ID の onid からネットワーク種別を推定し、コーデック情報を埋める。
+        // 何も埋めないと Jellyfin がコーデックを「不明」と判断し、Direct Stream
+        // (コンテナだけ remux してコーデックは copy) を選ばずトランスコードに走る。
+        // ヒントを与えることでクライアントが対応していれば HEVC/MPEG2 のまま流せる。
+        bool isBs4k = false;
+        var parts = channelId.Split('-');
+        if (parts.Length == 3 && int.TryParse(parts[0], out var onid))
+        {
+            isBs4k = onid == 11; // ONID 0x000B = 新4K衛星放送
+        }
+
+        var streams = new List<MediaStream>
+        {
+            new MediaStream
+            {
+                Type = MediaStreamType.Video,
+                Index = 0,
+                Codec = isBs4k ? "hevc" : "mpeg2video",
+                Profile = isBs4k ? "Main 10" : "Main",
+                Width = isBs4k ? 3840 : 1440,
+                Height = isBs4k ? 2160 : 1080,
+                IsInterlaced = !isBs4k,           // BS4K は progressive
+                IsAVC = false,                    // HEVC/MPEG2 どちらも AVC ではない
+                BitRate = isBs4k ? 33_000_000 : 17_000_000,
+                AspectRatio = "16:9",
+                BitDepth = isBs4k ? 10 : 8,       // BS4K HEVC Main 10 は 10bit
+                PixelFormat = isBs4k ? "yuv420p10le" : "yuv420p",
+            },
+            new MediaStream
+            {
+                Type = MediaStreamType.Audio,
+                Index = 1,
+                Codec = "aac",
+                SampleRate = 48000,
+                Channels = 2,                     // 主音声は基本ステレオ AAC (5.1 でも Jellyfin が再判定する)
+                BitRate = 192_000,
+            },
+        };
+
         return new MediaSourceInfo
         {
             Id = channelId,
@@ -174,16 +213,22 @@ public class LiveTvService : ILiveTvService
             IsInfiniteStream = true,
             RequiresOpening = false,
             RequiresClosing = false,
-            SupportsProbing = true,
             // ライブ視聴開始時、ffmpeg のストリーム解析が既定の長い analyzeduration
-            // (200 秒) いっぱい走り、頭が数分固まる。ブリッジが映像+音声のみの素直な
-            // TS に remux しているため数秒で解析できる。短い値を明示して即開始させる。
+            // (200 秒) いっぱい走り、頭が数分固まるのを防ぐため短く明示する。
             AnalyzeDurationMs = 3000,
-            MediaStreams = new List<MediaStream>
-            {
-                new MediaStream { Type = MediaStreamType.Video, Index = -1 },
-                new MediaStream { Type = MediaStreamType.Audio, Index = -1 },
-            },
+            // クライアントが mpegts + HEVC/MPEG2 を直接食えるなら、Jellyfin は HLS への
+            // コンテナ変換すらせず、このブリッジ URL をそのままクライアントに渡す
+            // (Direct Play)。コンテナ変換が必要なクライアントには Direct Stream
+            // (コーデック copy) でフォールバック、最終手段がトランスコード。
+            // Live TV パスでは Jellyfin 内部 (LiveTvManager) が SupportsTranscoding を
+            // 上書きするためここで false にしても効かない — クライアント側 / サーバ側で
+            // h264_amf を回避させる必要がある。
+            SupportsProbing = true,
+            SupportsDirectPlay = true,
+            SupportsDirectStream = true,
+            SupportsTranscoding = true,
+            Bitrate = isBs4k ? 33_500_000 : 17_500_000,
+            MediaStreams = streams,
         };
     }
 

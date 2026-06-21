@@ -228,8 +228,9 @@ class EDCBTuner:
 
         # チューナーを起動する
         ## ほかのタスクがチューナーを閉じている (Idling -> Offline) などで空きがない場合があるのでいくらかリトライする
+        ## BonDriver_dantto4k のように初回チャンネル切り替えが遅い系を考慮して全体 15 秒、間隔 2 秒。
         self._state = 'Starting'
-        set_ch_timeout = time.monotonic() + 5  # 現在時刻から5秒後
+        set_ch_timeout = time.monotonic() + 15  # 現在時刻から 15 秒後
         while True:
 
             # チューナーの起動（あるいはチャンネル変更）を試す
@@ -240,7 +241,9 @@ class EDCBTuner:
             if self._edcb_process_id is not None or time.monotonic() >= set_ch_timeout:
                 break
 
-            await asyncio.sleep(0.5)
+            # SetCh を高頻度で叩くと dantto4k のような遅い BonDriver を混乱させ得るので
+            # 間隔を取る (旧 0.5 秒 → 2 秒)
+            await asyncio.sleep(2.0)
 
         # チューナーの起動に失敗した
         if self._edcb_process_id is None:

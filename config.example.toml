@@ -29,6 +29,9 @@ days = 8
 # PT2 は ISDB-T(地上波) ×2 / ISDB-S(BS/CS) ×2。録画用にチューナーを残すために使う。
 live_max_isdbt = 1
 live_max_isdbs = 1
+# BS4K(新4K衛星放送)は dantto4k 経由などで別物理チューナーになるため独立枠。
+# BS4K を使わない環境では値はそのままで構わない (該当 BonDriver が無ければ無視される)。
+live_max_bs4k = 1
 # true の場合、EDCB が当該種別で録画中はライブ視聴を一切許可しない (録画を優先)。
 block_live_while_recording = true
 
